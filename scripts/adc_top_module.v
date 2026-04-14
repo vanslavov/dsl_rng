@@ -51,7 +51,7 @@ wire             adc_ready;
 wire            adc_valid;
 wire    [11:0]  seed_from_sampler;
 wire            seed_valid;
-
+wire    [11:0]  final_rng_out;  // Carries the final 12-bit random number from the Xorshift algorithm
 
 assign  rstn = ~btn[1];
 assign adc_ready = rstn & clk_adc_tri;
@@ -273,6 +273,13 @@ random_sampler #(.DATA_WIDTH(12), .COUNTER_WIDTH(17)) rng_sampler (
     .processed_signal(adc_data),   // or whatever signal they provide
     .seed(seed_from_sampler),
     .seed_valid(seed_valid)
+);
+
+    .clk(sysclk),                     
+    .rstn(rstn),                      
+    .seed_valid(seed_valid),          
+    .seed(seed_from_sampler),         
+    .rand_out(final_rng_out)          
 );
 
 endmodule
