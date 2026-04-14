@@ -16,7 +16,7 @@ module xorshift_prng (
             state <= 16'hFFFF;
         end 
         else if (seed_valid) begin
-            // Grabs the physical seed from your teammate's sampler exactly when it fires
+            // Grabs the physical seed from sampler exactly when it fires
             state <= (seed == 0) ? 16'hFFFF : {4'b1111, seed};
         end
         else begin
