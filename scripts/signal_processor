@@ -5,6 +5,7 @@ module signal_processor (
     input  wire rst_n,          
     input  wire raw_bit_in,      // the LSBs were XORed in the top_module 
     input  wire raw_valid,       // Triggered to indicate that ADC finished
+    output reg rm_corrbias,
     output reg [11:0] transformed_sig 
 );
 
@@ -24,7 +25,10 @@ module signal_processor (
             transformed_sig <= 12'h000;
             shift_reg   <= 12'h000;
             bit_cnt     <= 4'd0;
+            rm_corrbias <= 1'd0;
+
         end else if (raw_valid) begin
+            rm_corrbias <= 1'd0;  //Denote to RNG algo when to extract seed number.
             
             // markov shift logic
             if (prev_bit == 1'b0) begin
@@ -38,6 +42,7 @@ module signal_processor (
                         if (bit_cnt == 4'd11) begin
                             transformed_sig <= {shift_reg[10:0], vn0_first};
                             bit_cnt <= 4'd0;
+                            rm_corrbias <= 1'd1;
                         end else begin
                             bit_cnt <= bit_cnt + 1'b1;
                         end
@@ -55,6 +60,7 @@ module signal_processor (
                         if (bit_cnt == 4'd11) begin
                             transformed_sig <= {shift_reg[10:0], vn1_first};
                             bit_cnt <= 4'd0;
+                            rm_corrbias <= 1'd1;
                         end else begin
                             bit_cnt <= bit_cnt + 1'b1;
                         end
