@@ -1,5 +1,6 @@
 `timescale 1ns / 1ps
 
+// Used to output the randomly generated signal
 module top_module(
     input sysclk,
     input [1:0] btn,
@@ -36,7 +37,7 @@ reg     [7:0]   uart_data;
 reg     [3:0]   uart_cnter;
 reg             adc_ch;
 
-wire             adc_mode;
+wire    [1:0]   adc_mode;
 wire    [11:0]  adc_data;
 reg     [11:0]  r_adc_data0;
 reg     [11:0]  r_adc_data1;
@@ -45,10 +46,41 @@ reg     [11:0]  transf_data;
 wire            adc_ready;
 wire            adc_valid;
 wire    [11:0]  t_signal;
-//wire    [11:0]  ch0_out; 
-//wire    [11:0]  ch1_out;
+wire            valid_transform;
+wire    [31:0]  rng_num;
 
+// Segmenting rng_num
+reg             page;
+reg             btn0_prev;
+wire    [15:0]  active_num;
+wire            btn0_rise;
+wire    [31:0]  data;
+wire    [3:0]   d0 = data[3:0];
+wire    [3:0]   d1 = data[7:4];
+wire    [3:0]   d2 = data[11:8];
+wire    [3:0]   d3 = data[15:12];
+wire    [3:0]   d4 = data[19:16];
+wire    [3:0]   d5 = data[23:20];
+wire    [3:0]   d6 = data[27:24];
+wire    [3:0]   d7 = data[31:28];
+wire [31:0] display_value = rng_num;
 
+always @(posedge clk_seg_clk or negedge rstn) begin
+    if (!rstn)
+        page <= 1'b0;
+    else if (btn0_rise)
+        page <= ~page;
+end
+
+always @(posedge clk_seg_clk or negedge rstn) begin
+    if (!rstn)
+        btn0_prev <= 1'b0;
+    else
+        btn0_prev <= btn[0];
+end
+
+assign active_num = (page == 1'b0) ? display_value[31:16] : display_value[15:0];
+assign btn0_rise = btn[0] & ~btn0_prev;
 assign  rstn = ~btn[1];
 assign adc_ready = rstn & clk_adc_tri;
 // Allows for toggling between 2 channels, single end
@@ -159,11 +191,11 @@ always @(posedge clk_uart_tri or negedge rstn) begin
  end
 
 
-// Displays ch0 
-assign seg_hex3 = 4'h0;
-assign seg_hex2 = r_adc_data0[11:8];
-assign seg_hex1 = r_adc_data0[7:4];
-assign seg_hex0 = r_adc_data0[3:0];
+// Displays rng_num
+assign seg_hex0 = active_num[3:0];
+assign seg_hex1 = active_num[7:4];
+assign seg_hex2 = active_num[11:8];
+assign seg_hex3 = active_num[15:12];
 
 clk_div #( 
     .CLK_IN_HZ  (12_000_000),
@@ -185,7 +217,7 @@ clk_div #(
 
 clk_div #( 
     .CLK_IN_HZ  (12_000_000),
-    .CLK_OUT_HZ (20)
+    .CLK_OUT_HZ (1500)
 )div2(
     .i_clkin    (sysclk),  
     .i_rstn     (rstn),   
@@ -250,7 +282,18 @@ signal_processor proc_u0 (
     .rst_n           (rstn),
     .raw_bit_in      (r_adc_data0[0] ^ r_adc_data1[0]), // XOR the lsbs for more entropy
     .raw_valid       (adc_valid),    
-    .transformed_sig (t_signal)          
+    .transformed_sig (t_signal),
+    .rm_corrbias     (valid_transform)         
+);
+
+rng_algo_processor proc_u1 (
+    .clk             (clk_adc_tri), // use adc clock for timing
+    .reset           (rstn),
+    .ap_valid        (adc_valid),
+    .seed_load       (valid_transform),
+    .de_corrbias_sig (t_signal),
+    .rng_num_out     (rng_num)
+                    
 );
 
 endmodule
