@@ -1,0 +1,77 @@
+`timescale 1ns / 1ps
+
+module signal_processor (
+    input  wire clk,             // use clk_adc_tri 
+    input  wire rst_n,          
+    input  wire raw_bit_in,      // the LSBs were XORed in the top_module 
+    input  wire raw_valid,       // Triggered to indicate that ADC finished
+    output reg rm_corrbias,
+    output reg [11:0] transformed_sig 
+);
+
+    reg prev_bit; // for markov store the previous bit
+    reg vn0_waiting, vn0_first; // state registers for von neumann
+    reg vn1_waiting, vn1_first; // state registers for von neumann
+    
+    // Internal buffer to build a 12-bit word
+    reg [11:0] shift_reg;
+    reg [3:0]  bit_cnt;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            prev_bit    <= 1'b0;
+            vn0_waiting <= 1'b0;
+            vn1_waiting <= 1'b0;
+            transformed_sig <= 12'h000;
+            shift_reg   <= 12'h000;
+            bit_cnt     <= 4'd0;
+            rm_corrbias <= 1'd0;
+
+        end else if (raw_valid) begin
+            rm_corrbias <= 1'd0;  //Denote to RNG algo when to extract seed number.
+            
+            // markov shift logic
+            if (prev_bit == 1'b0) begin
+                if (!vn0_waiting) begin
+                    vn0_first   <= raw_bit_in;
+                    vn0_waiting <= 1'b1;
+                end else begin
+                    if (vn0_first != raw_bit_in) begin
+                        //von neumann queue 0
+                        shift_reg <= {shift_reg[10:0], vn0_first};
+                        if (bit_cnt == 4'd11) begin
+                            transformed_sig <= {shift_reg[10:0], vn0_first};
+                            bit_cnt <= 4'd0;
+                            rm_corrbias <= 1'd1;
+                        end else begin
+                            bit_cnt <= bit_cnt + 1'b1;
+                        end
+                    end
+                    vn0_waiting <= 1'b0;
+                end
+            end else begin
+                if (!vn1_waiting) begin
+                    vn1_first   <= raw_bit_in;
+                    vn1_waiting <= 1'b1;
+                end else begin
+                    if (vn1_first != raw_bit_in) begin
+                        // von neumann queue 1
+                        shift_reg <= {shift_reg[10:0], vn1_first};
+                        if (bit_cnt == 4'd11) begin
+                            transformed_sig <= {shift_reg[10:0], vn1_first};
+                            bit_cnt <= 4'd0;
+                            rm_corrbias <= 1'd1;
+                        end else begin
+                            bit_cnt <= bit_cnt + 1'b1;
+                        end
+                    end
+                    vn1_waiting <= 1'b0;
+                end
+            end
+
+            prev_bit <= raw_bit_in; 
+            
+        end
+    end
+
+endmodule
