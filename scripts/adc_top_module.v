@@ -21,12 +21,16 @@ module top_module(
 //UART Data Trigger   @40KHz;
 //UART Data Rate      @921600Hz;
 //7Segment Display    @1KHz;
+//Random Sampler Clk  @2kHz;
+
 
 wire            clk_adc_tri,
                 clk_adc_spi,
                 clk_uart_tri,
                 clk_uart_clk,
-                clk_seg_clk;
+                clk_seg_clk,
+                clk_rnd_sam;
+  
 
 wire            rstn;
 
@@ -233,6 +237,15 @@ clk_div #(
     .o_clkout   (clk_seg_clk)
 );
 
+clk_div #( 
+    .CLK_IN_HZ  (12_000_000),
+    .CLK_OUT_HZ (2_000)
+)div5(
+    .i_clkin    (sysclk),  
+    .i_rstn     (rstn),   
+    .o_clkout   (clk_rnd_sam)
+);
+
 drv_7segment seg_u0(
     .i_rstn  (rstn), 
     .i_clk   (clk_seg_clk),  
@@ -268,7 +281,7 @@ drv_mcp3202 adc_u0 (
 );
 
 random_sampler #(.DATA_WIDTH(12), .COUNTER_WIDTH(17)) rng_sampler (
-    .clk(sysclk),
+    .clk(clk_rnd_sam),
     .rst_n(rstn),
     .processed_signal(adc_data),   // or whatever signal they provide
     .seed(seed_from_sampler),
