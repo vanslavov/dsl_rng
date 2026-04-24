@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
 
-// Used to output the randomly generated signal
-module top_module(
+module adc_top_module_rngout(
     input sysclk,
     input [1:0] btn,
     output [7:0] seg,
@@ -41,8 +41,8 @@ wire    [1:0]   adc_mode;
 wire    [11:0]  adc_data;
 reg     [11:0]  r_adc_data0;
 reg     [11:0]  r_adc_data1;
-reg     [11:0]  latch_transf_data; 
-reg     [11:0]  transf_data;   
+reg     [31:0]  latch_transf_data; 
+reg     [31:0]  transf_data;   
 wire            adc_ready;
 wire            adc_valid;
 wire    [11:0]  t_signal;
@@ -50,26 +50,23 @@ wire            valid_transform;
 wire    [31:0]  rng_num;
 
 // Segmenting rng_num
+reg     [31:0]  display_value;
 reg             page;
 reg             btn0_prev;
-wire    [15:0]  active_num;
 wire            btn0_rise;
 wire    [31:0]  data;
-wire    [3:0]   d0 = data[3:0];
-wire    [3:0]   d1 = data[7:4];
-wire    [3:0]   d2 = data[11:8];
-wire    [3:0]   d3 = data[15:12];
-wire    [3:0]   d4 = data[19:16];
-wire    [3:0]   d5 = data[23:20];
-wire    [3:0]   d6 = data[27:24];
-wire    [3:0]   d7 = data[31:28];
-wire [31:0] display_value = rng_num;
+wire    [15:0]        active_num;
+
 
 always @(posedge clk_seg_clk or negedge rstn) begin
-    if (!rstn)
+    if (!rstn) begin
         page <= 1'b0;
-    else if (btn0_rise)
-        page <= ~page;
+        display_value <= 32'd0;
+    end 
+    else if (btn0_rise) begin
+        page <= ~page;              // toggle upper/lower 16 bits
+        display_value <= rng_num;   // latch NEW number only on press
+    end
 end
 
 always @(posedge clk_seg_clk or negedge rstn) begin
@@ -130,7 +127,7 @@ always @(posedge clk_uart_tri or negedge rstn) begin
         uart_ready <= 1'b0;
         led        <= 1'b0;
     end else begin
-    transf_data <= t_signal;
+    transf_data <= rng_num;
         case (uart_cnter)
             4'd0: begin
                 latch_transf_data <= transf_data;
@@ -155,7 +152,7 @@ always @(posedge clk_uart_tri or negedge rstn) begin
             end
             
             4'd4: begin
-                uart_data  <= {4'h00, latch_transf_data[11:8]};
+                uart_data  <= {latch_transf_data[31:24]};
                 uart_ready <= 1'b1;
                 uart_cnter <= uart_cnter + 1'b1;
             end
@@ -166,7 +163,7 @@ always @(posedge clk_uart_tri or negedge rstn) begin
             end
             
             4'd6: begin
-                uart_data  <= {latch_transf_data[7:0]};
+                uart_data  <= {latch_transf_data[23:16]};
                 uart_ready <= 1'b1;
                 uart_cnter <= uart_cnter + 1'b1;
             end
@@ -175,8 +172,30 @@ always @(posedge clk_uart_tri or negedge rstn) begin
                 uart_ready <= 1'b0;
                 uart_cnter <= uart_cnter + 1'b1;
            end  
+           
+           4'd8: begin
+                uart_data  <= {latch_transf_data[15:8]};
+                uart_ready <= 1'b1;
+                uart_cnter <= uart_cnter + 1'b1;
+          end
+                
+           4'd9: begin
+                uart_ready <= 1'b0;
+                uart_cnter <= uart_cnter + 1'b1;
+           end
+               
+           4'd10: begin
+                uart_data  <= {latch_transf_data[7:0]};
+                uart_ready <= 1'b1;
+                uart_cnter <= uart_cnter + 1'b1;
+            end
             
-            4'd8: begin
+            4'd11: begin
+                uart_ready <= 1'b0;
+                uart_cnter <= uart_cnter + 1'b1;
+            end
+            
+            4'd12: begin
                 uart_data  <= 8'hFF;
                 uart_ready <= 1'b1;
                 uart_cnter <= 4'd00;
@@ -189,7 +208,6 @@ always @(posedge clk_uart_tri or negedge rstn) begin
         endcase
     end
  end
-
 
 // Displays rng_num
 assign seg_hex0 = active_num[3:0];
